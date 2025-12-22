@@ -1,0 +1,25 @@
+//college management System 
+
+//if no uniform = blocked for 1day
+
+
+import java.util.Scanner;
+
+class collegeManagementSystem{
+
+public static void main(String[]args){
+
+Scanner sc = new Scanner(System.in);
+
+System.out.println("Hello! Welcome To LPU College Management System");
+System.out.println("Here, You Can Find Rules And Regulations and their Effects And Measures");
+
+System.out.println("Classified Into Parts\n 1.Entry & Exit Rules\n 2.Attendance Rules\n 3.Dress Code Rules\n 4.Mobile Phone Rules\n 5.Behavior & Discipline Rules 6.Effects of Rule Violations\n 8.Disciplinary Measures ");
+
+
+
+
+
+}
+
+}
