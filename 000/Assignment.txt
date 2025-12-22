@@ -1,3 +1,0 @@
-//college management System 
-
-if no uniform = blocked for 1day
