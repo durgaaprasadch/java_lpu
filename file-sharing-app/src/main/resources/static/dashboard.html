@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - File Sharing App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <h1>File Sharing Dashboard</h1>
+            <div class="user-info">
+                <span>Welcome, <strong id="userName"></strong></span>
+                <button onclick="logout()" class="btn btn-small">Logout</button>
+            </div>
+        </header>
+
+        <div class="content">
+            <section class="upload-section">
+                <h2>Upload File</h2>
+                <form id="uploadForm">
+                    <div class="form-group">
+                        <input type="file" id="fileInput" accept=".pdf,.jpg,.png,.txt" required>
+                        <small>Allowed: PDF, JPG, PNG, TXT (Max 10MB)</small>
+                    </div>
+                    <button type="submit" class="btn">Upload File</button>
+                </form>
+                <div class="error-message" id="uploadError"></div>
+                <div class="success-message" id="uploadSuccess"></div>
+            </section>
+
+            <section class="files-section">
+                <h2>My Files</h2>
+                <div id="loadingMessage">Loading files...</div>
+                <div id="filesContainer"></div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Modal for share link -->
+    <div id="shareLinkModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>Share Link Generated</h2>
+            <div class="share-link-container">
+                <input type="text" id="shareLinkInput" readonly>
+                <button onclick="copyShareLink()" class="btn">Copy Link</button>
+            </div>
+            <p id="expiryInfo"></p>
+            <div class="success-message" id="copySuccess"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080/api';
+        let token = localStorage.getItem('token');
+
+        // Check authentication
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        // Display user name
+        document.getElementById('userName').textContent = localStorage.getItem('name');
+
+        // Load files on page load
+        loadMyFiles();
+
+        // Upload file handler
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                document.getElementById('uploadError').textContent = 'Please select a file';
+                return;
+            }
+
+            // Check file size (10MB = 10 * 1024 * 1024 bytes)
+            if (file.size > 10 * 1024 * 1024) {
+                document.getElementById('uploadError').textContent = 'File size exceeds 10MB limit';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_URL}/files/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    document.getElementById('uploadSuccess').textContent = 'File uploaded successfully!';
+                    document.getElementById('uploadError').textContent = '';
+                    fileInput.value = '';
+                    loadMyFiles(); // Refresh file list
+                    setTimeout(() => {
+                        document.getElementById('uploadSuccess').textContent = '';
+                    }, 3000);
+                } else {
+                    const data = await response.json();
+                    document.getElementById('uploadError').textContent = data.error || 'Upload failed';
+                    document.getElementById('uploadSuccess').textContent = '';
+                }
+            } catch (error) {
+                document.getElementById('uploadError').textContent = 'An error occurred during upload';
+                console.error('Error:', error);
+            }
+        });
+
+        // Load my files
+        async function loadMyFiles() {
+            try {
+                const response = await fetch(`${API_URL}/files/my-files`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const files = await response.json();
+                    displayFiles(files);
+                    document.getElementById('loadingMessage').style.display = 'none';
+                } else if (response.status === 401) {
+                    logout();
+                } else {
+                    document.getElementById('filesContainer').innerHTML = '<p>Error loading files</p>';
+                    document.getElementById('loadingMessage').style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('filesContainer').innerHTML = '<p>Error loading files</p>';
+                document.getElementById('loadingMessage').style.display = 'none';
+                console.error('Error:', error);
+            }
+        }
+
+        // Display files in table
+        function displayFiles(files) {
+            const container = document.getElementById('filesContainer');
+            
+            if (files.length === 0) {
+                container.innerHTML = '<p>No files uploaded yet</p>';
+                return;
+            }
+
+            let html = '<table class="files-table"><thead><tr>';
+            html += '<th>Filename</th><th>Type</th><th>Size</th><th>Upload Time</th><th>Actions</th>';
+            html += '</tr></thead><tbody>';
+
+            files.forEach(file => {
+                const size = formatFileSize(file.size);
+                const date = new Date(file.uploadTime).toLocaleString();
+                
+                html += `<tr>
+                    <td>${file.filename}</td>
+                    <td>${file.fileType.toUpperCase()}</td>
+                    <td>${size}</td>
+                    <td>${date}</td>
+                    <td>
+                        <button onclick="downloadFile(${file.id})" class="btn-action">Download</button>
+                        <button onclick="generateShareLink(${file.id})" class="btn-action">Share</button>
+                    </td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        // Download file
+        async function downloadFile(fileId) {
+            try {
+                const response = await fetch(`${API_URL}/files/download/${fileId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'file';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    alert('Error downloading file');
+                }
+            } catch (error) {
+                alert('Error downloading file');
+                console.error('Error:', error);
+            }
+        }
+
+        // Generate share link
+        async function generateShareLink(fileId) {
+            try {
+                const response = await fetch(`${API_URL}/share/${fileId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('shareLinkInput').value = data.shareLink;
+                    document.getElementById('expiryInfo').textContent = `Link expires: ${data.expiryTime}`;
+                    document.getElementById('shareLinkModal').style.display = 'block';
+                } else {
+                    alert('Error generating share link');
+                }
+            } catch (error) {
+                alert('Error generating share link');
+                console.error('Error:', error);
+            }
+        }
+
+        // Copy share link
+        function copyShareLink() {
+            const input = document.getElementById('shareLinkInput');
+            input.select();
+            document.execCommand('copy');
+            document.getElementById('copySuccess').textContent = 'Link copied to clipboard!';
+            setTimeout(() => {
+                document.getElementById('copySuccess').textContent = '';
+            }, 2000);
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('shareLinkModal').style.display = 'none';
+            document.getElementById('copySuccess').textContent = '';
+        }
+
+        // Logout
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('email');
+            localStorage.removeItem('name');
+            window.location.href = 'login.html';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('shareLinkModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>
