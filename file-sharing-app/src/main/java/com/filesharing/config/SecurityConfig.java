@@ -32,10 +32,15 @@ public class SecurityConfig {
     /**
      * Configure security filter chain
      * Defines which endpoints are public and which require authentication
+     * 
+     * CSRF is disabled because this is a stateless REST API using JWT tokens
+     * in Authorization headers. JWT tokens are not vulnerable to CSRF attacks
+     * since they are not automatically sent by browsers like cookies are.
      */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            // CSRF protection is disabled for JWT-based stateless authentication
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
